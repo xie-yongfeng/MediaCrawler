@@ -4,6 +4,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "data" / "fund_insight.db"
+BACKUP_DIR = DB_PATH.parent / "backups"
 
 AVATAR_COLORS = ["#78e8bb", "#9b8cff", "#62b8ff", "#ffb67b", "#ff8db4"]
 

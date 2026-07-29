@@ -25,8 +25,9 @@ def load_dotenv() -> None:
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request
-from config import BASE_DIR, DB_PATH
+from config import BACKUP_DIR, BASE_DIR, DB_PATH
 from crawler.douyin import DouyinCollector, LoginExpired
+from daily_backup_scheduler import start_daily_backup_scheduler
 from db import database, initialize_database, row_dict
 from intraday_scheduler import start_intraday_scheduler
 from service import service
@@ -154,6 +155,7 @@ def run_sync(creator_ids: list[int]) -> None:
 @app.on_event("startup")
 def startup():
     initialize_database()
+    start_daily_backup_scheduler(DB_PATH, BACKUP_DIR)
     start_intraday_scheduler(sync_lock=SYNC_LOCK, sync_job=SYNC_JOB, database=database, start_sync=start_sync, sync_payload=SyncPayload)
 
 
