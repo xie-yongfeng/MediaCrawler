@@ -7,8 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 VENV_DIR="$SCRIPT_DIR/.venv"
-MEDIA_CRAWLER_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-CDP_USER_DATA_DIR="${CDP_USER_DATA_DIR:-$MEDIA_CRAWLER_ROOT/browser_data/cdp_dy_user_data_dir}"
+CDP_USER_DATA_DIR="${CDP_USER_DATA_DIR:-$SCRIPT_DIR/data/chrome-profile}"
 PYTHON_BIN="python"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
@@ -32,7 +31,7 @@ cdp_ready() {
     curl --fail --silent --max-time 1 http://127.0.0.1:9222/json/version >/dev/null 2>&1
 }
 
-# Keep a dedicated Chrome instance available for all crawler subprocesses.
+# Keep one dedicated Chrome instance for the built-in collector.
 if ! cdp_ready; then
     CHROME_BIN="${CHROME_BIN:-}"
     if [ -z "$CHROME_BIN" ]; then

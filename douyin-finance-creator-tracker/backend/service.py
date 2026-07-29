@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException
 
+from crawler.douyin.models import CollectResult
 from config import AVATAR_COLORS
 from db import database, row_dict
 
@@ -150,14 +151,81 @@ class FundInsightService:
                 rows = db.execute(f"SELECT id, consent FROM creators WHERE id IN ({placeholders})", tuple(creator_ids)).fetchall()
             else:
                 rows = db.execute("SELECT id, consent FROM creators WHERE platform_creator_id IS NOT NULL").fetchall()
-        selected = [row["id"] for row in rows]
+        rows_by_id = {row["id"]: row for row in rows}
+        selected = (
+            list(dict.fromkeys(creator_ids))
+            if creator_ids
+            else [row["id"] for row in rows]
+        )
         if not selected:
             raise HTTPException(400, "请先添加至少一位抖音博主。")
         if creator_ids and len(selected) != len(set(creator_ids)):
             raise HTTPException(404, "部分博主不存在。")
-        if any(not row["consent"] for row in rows):
+        if any(not rows_by_id[creator_id]["consent"] for creator_id in selected):
             raise HTTPException(400, "所选博主缺少用户来源确认。")
         return selected
+
+    def sync_since(self, creator_id: int) -> tuple[int, int]:
+        """Return an initial collection limit and the exclusive publish-time cursor."""
+        with database() as db:
+            row = db.execute(
+                "SELECT COUNT(*) AS count, MAX(published_at) AS latest_published_at FROM videos WHERE creator_id=?",
+                (creator_id,),
+            ).fetchone()
+        if not row or not row["count"]:
+            return 15, int((datetime.now() - timedelta(days=3)).timestamp())
+        try:
+            return 1000, int(datetime.strptime(row["latest_published_at"], "%Y-%m-%d %H:%M").timestamp())
+        except (TypeError, ValueError, OSError):
+            return 1000, 0
+
+    def upsert_collected_creator(self, result: CollectResult, creator_id: int) -> int:
+        """Persist one structured collection result without any crawler-owned database."""
+        with database() as db:
+            creator = db.execute("SELECT * FROM creators WHERE id=?", (creator_id,)).fetchone()
+            if not creator:
+                raise LookupError("博主不存在。")
+            tags = self._parse_json(creator["tags_json"], [])
+            now = self._now_text()
+            imported = 0
+            for aweme in result.awemes:
+                published_at = datetime.fromtimestamp(aweme.create_time).strftime("%Y-%m-%d %H:%M")
+                title = aweme.desc or ""
+                topic = next((tag for tag in tags if tag.lower() in title.lower()), tags[0] if tags else "未分类")
+                values = (
+                    creator_id, title, published_at, now, aweme.duration_seconds, topic, aweme.desc,
+                    f"创作者原文：{aweme.desc}" if aweme.desc else "创作者观点需在原视频中核对。",
+                    f"https://www.douyin.com/video/{aweme.aweme_id}", aweme.cover_url, aweme.playback_url, aweme.music_download_url,
+                    self._is_critical_window(published_at), json.dumps(tags, ensure_ascii=False),
+                    json.dumps(aweme.raw_payload, ensure_ascii=False, separators=(",", ":")), aweme.aweme_id,
+                )
+                existing = db.execute("SELECT id FROM videos WHERE external_id=?", (aweme.aweme_id,)).fetchone()
+                if existing:
+                    db.execute(
+                        """UPDATE videos SET creator_id=?, title=?, published_at=?, discovered_at=?, duration_seconds=?, topic=?, summary=?, viewpoint=?,
+                           source_url=?, cover_url=?, playback_url=?, music_download_url=?, is_critical=?, tags_json=?, source_status='用户提供来源', raw_payload_json=?
+                           WHERE external_id=?""",
+                        values,
+                    )
+                else:
+                    db.execute(
+                        """INSERT INTO videos (creator_id, title, published_at, discovered_at, duration_seconds, topic, summary, viewpoint,
+                           source_url, cover_url, playback_url, music_download_url, is_critical, tags_json, raw_payload_json, external_id, fact_status, risk_note,
+                           processing_status, transcript_status, transcript_progress, source_status)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未核验',
+                           '内容仅作信息整理；请查看原视频与来源后独立判断。', 'unread', 'unavailable', 0, '用户提供来源')""",
+                        values,
+                    )
+                    imported += 1
+            db.execute(
+                """UPDATE creators SET name=?, handle=?, avatar=?, last_synced=?, last_crawled_at=?, source_status=?, source_message=?
+                   WHERE id=?""",
+                (
+                    result.creator.nickname, f"@{result.creator.nickname}", result.creator.avatar_url or creator["avatar"],
+                    now, now, "已同步", f"最近同步新增 {imported} 条作品", creator_id,
+                ),
+            )
+        return imported
 
     def creator_videos(self, creator_id: int, filter_name: str, search: str) -> list[dict[str, Any]]:
         allowed = {"all", "critical", "unread", "processed", "captioned"}

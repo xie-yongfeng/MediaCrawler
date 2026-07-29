@@ -70,6 +70,12 @@ def ensure_column(db: sqlite3.Connection, table: str, column: str, definition: s
         db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
+def remove_column(db: sqlite3.Connection, table: str, column: str) -> None:
+    columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
+    if column in columns:
+        db.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+
+
 def initialize_database() -> None:
     with database() as db:
         db.executescript(
@@ -81,7 +87,7 @@ def initialize_database() -> None:
               platform TEXT NOT NULL DEFAULT '抖音', verified INTEGER NOT NULL DEFAULT 0,
               last_synced TEXT, platform_creator_id TEXT UNIQUE, profile_url TEXT,
               consent INTEGER NOT NULL DEFAULT 0, source_status TEXT NOT NULL DEFAULT '待同步',
-              source_message TEXT NOT NULL DEFAULT '', last_crawled_at TEXT, crawler_creator_hash TEXT
+              source_message TEXT NOT NULL DEFAULT '', last_crawled_at TEXT
             );
             CREATE TABLE IF NOT EXISTS videos (
               id INTEGER PRIMARY KEY, creator_id INTEGER NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
@@ -90,11 +96,11 @@ def initialize_database() -> None:
               topic TEXT NOT NULL DEFAULT '未分类', summary TEXT NOT NULL DEFAULT '',
               viewpoint TEXT NOT NULL DEFAULT '', fact_status TEXT NOT NULL DEFAULT '未核验',
               risk_note TEXT NOT NULL DEFAULT '内容仅作信息整理，不构成投资建议。',
-              source_url TEXT NOT NULL, cover_url TEXT, playback_url TEXT, processing_status TEXT NOT NULL DEFAULT 'unread',
+              source_url TEXT NOT NULL, cover_url TEXT, playback_url TEXT, music_download_url TEXT, processing_status TEXT NOT NULL DEFAULT 'unread',
               is_critical INTEGER NOT NULL DEFAULT 0, transcript_status TEXT NOT NULL DEFAULT 'unavailable',
               transcript_progress INTEGER NOT NULL DEFAULT 0, transcript_confidence INTEGER,
               transcript_updated_at TEXT, transcript_text TEXT, tags_json TEXT NOT NULL DEFAULT '[]',
-              source_status TEXT NOT NULL DEFAULT '用户提供来源'
+              source_status TEXT NOT NULL DEFAULT '用户提供来源', raw_payload_json TEXT
             );
             CREATE TABLE IF NOT EXISTS transcript_segments (
               id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
@@ -111,11 +117,14 @@ def initialize_database() -> None:
             ("creators", "consent", "INTEGER NOT NULL DEFAULT 0"),
             ("creators", "source_status", "TEXT NOT NULL DEFAULT '待同步'"),
             ("creators", "source_message", "TEXT NOT NULL DEFAULT ''"),
-            ("creators", "last_crawled_at", "TEXT"), ("creators", "crawler_creator_hash", "TEXT"),
+            ("creators", "last_crawled_at", "TEXT"),
             ("videos", "external_id", "TEXT"), ("videos", "cover_url", "TEXT"),
             ("videos", "playback_url", "TEXT"),
+            ("videos", "music_download_url", "TEXT"),
             ("videos", "source_status", "TEXT NOT NULL DEFAULT '用户提供来源'"),
+            ("videos", "raw_payload_json", "TEXT"),
         ]:
             ensure_column(db, table, column, definition)
+        remove_column(db, "creators", "crawler_creator_hash")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_creators_platform_id ON creators(platform_creator_id)")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_external_id ON videos(external_id)")

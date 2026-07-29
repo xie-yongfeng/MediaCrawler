@@ -9,8 +9,7 @@ set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
 set "VENV_DIR=%SCRIPT_DIR%.venv"
-for %%I in ("%SCRIPT_DIR%..\..") do set "MEDIA_CRAWLER_ROOT=%%~fI"
-if not defined CDP_USER_DATA_DIR set "CDP_USER_DATA_DIR=%MEDIA_CRAWLER_ROOT%\browser_data\cdp_dy_user_data_dir"
+if not defined CDP_USER_DATA_DIR set "CDP_USER_DATA_DIR=%SCRIPT_DIR%data\chrome-profile"
 
 if not defined HOST set "HOST=0.0.0.0"
 if not defined PORT set "PORT=8000"
@@ -48,7 +47,7 @@ endlocal
 exit /b
 
 :ensure_cdp_chrome
-rem Keep a dedicated Chrome instance available for all crawler subprocesses.
+rem Keep one dedicated Chrome instance for the built-in collector.
 netstat -ano | findstr /r /c:":9222 .*LISTENING" >nul
 if not errorlevel 1 exit /b 0
 
@@ -57,7 +56,15 @@ if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME_PATH=
 if defined CHROME_PATH goto chrome_path_ready
 if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "CHROME_PATH=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
 if defined CHROME_PATH goto chrome_path_ready
-echo [run.bat] Chrome was not found. Set CHROME_PATH to chrome.exe before starting the service.
+if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" set "CHROME_PATH=%LocalAppData%\Google\Chrome\Application\chrome.exe"
+if defined CHROME_PATH goto chrome_path_ready
+if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" set "CHROME_PATH=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
+if defined CHROME_PATH goto chrome_path_ready
+if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" set "CHROME_PATH=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
+if defined CHROME_PATH goto chrome_path_ready
+if exist "%LocalAppData%\Microsoft\Edge\Application\msedge.exe" set "CHROME_PATH=%LocalAppData%\Microsoft\Edge\Application\msedge.exe"
+if defined CHROME_PATH goto chrome_path_ready
+echo [run.bat] Chrome or Edge was not found. Set CHROME_PATH to chrome.exe or msedge.exe before starting the service.
 exit /b 1
 
 :chrome_path_ready
