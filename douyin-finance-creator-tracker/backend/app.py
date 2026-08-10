@@ -290,13 +290,20 @@ def update_video_status(video_id: int, payload: StatusPayload):
 
 def run_audioconvert_transcription(video_id: int) -> None:
     script = BASE_DIR / "audioconvert_transcriber.py"
-    result = subprocess.run([sys.executable, str(script), "--video-id", str(video_id)], cwd=BASE_DIR, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    output = result.stdout.strip()
-    if output:
-        for line in output.splitlines():
-            print(f"[AudioConvert][video={video_id}] {line}", flush=True)
-    if result.returncode:
-        print(f"[AudioConvert][video={video_id}] transcriber exited with code {result.returncode}", flush=True)
+    process = subprocess.Popen(
+        [sys.executable, "-u", str(script), "--video-id", str(video_id)],
+        cwd=BASE_DIR,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+    )
+    if process.stdout:
+        for line in process.stdout:
+            print(f"[AudioConvert][video={video_id}] {line.rstrip()}", flush=True)
+    returncode = process.wait()
+    if returncode:
+        print(f"[AudioConvert][video={video_id}] transcriber exited with code {returncode}", flush=True)
         with database() as db:
             db.execute("UPDATE videos SET transcript_status='failed', transcript_progress=0, transcript_updated_at=? WHERE id=?", (now_text(), video_id))
 
