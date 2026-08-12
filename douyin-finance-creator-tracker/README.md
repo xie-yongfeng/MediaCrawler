@@ -50,4 +50,4 @@ uv run python main.py --platform dy --lt qrcode --type creator --headless false 
 同步失败时，先检查博主 ID/主页链接、浏览器登录状态、平台可见性和 MediaCrawler 依赖。不会为失败任务编造演示内容。
 ## 字幕转写
 
-设置 `AUDIOCONVERT_TOKEN` 后，同步完成会通过 AudioConvert 自动转写最近 5 条作品；手动“识别”与自动转写使用相同服务。本地 SQLite 仅保存字幕文本与 Markdown 总结。
+设置 `AUDIOCONVERT_TOKEN` 后，可在前端对单条作品点击“识别”发起 AudioConvert 转写；同步不会自动转写。本地 SQLite 仅保存字幕文本与 Markdown 总结。

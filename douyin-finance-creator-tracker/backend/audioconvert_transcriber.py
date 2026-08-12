@@ -188,14 +188,14 @@ def creator_original_music_url(raw_payload: str | None, stored_music_url: str | 
 def transcribe(
     media_url: str,
     file_name: str,
-    scenario: str = "auto",
+    scenario: str = "note",
     on_progress: Callable[[int], None] | None = None,
 ) -> tuple[str, str]:
     logger.info("Submitting transcription: file=%s scenario=%s", file_name, scenario)
     response = requests.post(
         CREATE_API,
         headers=headers(),
-        json={"audio_url": media_url, "file_name": file_name, "language_code": "", "scenario": scenario},
+        json={"audio_url": media_url, "file_link": media_url, "file_name": file_name, "language_code": "", "scenario": scenario},
         timeout=60,
     )
     log_response("Create transcription task", response)

@@ -70,26 +70,6 @@ def video_stream_headers(source_url: str, range_header: str | None) -> dict[str,
     return headers
 
 
-def asr_configured() -> bool:
-    return bool(os.environ.get("AUDIOCONVERT_TOKEN"))
-
-
-def enqueue_creator_transcriptions(creator_id: int) -> None:
-    if not asr_configured():
-        return
-    with database() as db:
-        rows = db.execute(
-            "SELECT id FROM videos WHERE creator_id=? AND playback_url IS NOT NULL AND playback_url != '' AND transcript_status != 'completed' ORDER BY published_at DESC LIMIT 5",
-            (creator_id,),
-        ).fetchall()
-        db.executemany(
-            "UPDATE videos SET transcript_status='processing', transcript_progress=5, transcript_updated_at=? WHERE id=?",
-            [(now_text(), row["id"]) for row in rows],
-        )
-    for row in rows:
-        threading.Thread(target=run_audioconvert_transcription, args=(row["id"],), daemon=True).start()
-
-
 class CreatorPayload(BaseModel):
     name: str = Field(default="", max_length=80)
     platform_creator_id: str = Field(min_length=1, max_length=300)
@@ -134,7 +114,6 @@ def run_sync(creator_ids: list[int]) -> None:
                 imported = service.upsert_collected_creator(result, creator_id)
                 imported_total += imported
                 logs.append(f"{creator['name']}: 新增 {imported} 条作品")
-                enqueue_creator_transcriptions(creator_id)
             except LoginExpired as exc:
                 with database() as db:
                     db.execute("UPDATE creators SET source_status=?, source_message=?, last_crawled_at=? WHERE id=?",
